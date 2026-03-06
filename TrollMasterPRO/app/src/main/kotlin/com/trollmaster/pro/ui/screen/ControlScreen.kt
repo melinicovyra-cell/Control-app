@@ -7,14 +7,18 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +42,8 @@ fun ControlScreen(
     state: AppState,
     onCommand: (String, Map<String, String>) -> Unit,
     onCombo: (ComboCommand) -> Unit,
+    onToggleFavorite: (String) -> Unit,
+    onClearResult: () -> Unit,
     onBack: () -> Unit
 ) {
     val user = state.selectedUser ?: return
@@ -50,6 +56,7 @@ fun ControlScreen(
             resultSnack = state.lastCommandResult
             kotlinx.coroutines.delay(2500)
             resultSnack = null
+            onClearResult()
         }
     }
 
@@ -57,6 +64,7 @@ fun ControlScreen(
         CommandCategory.VIP -> OrangeAccent
         CommandCategory.ADMIN -> PurpleAccent
         CommandCategory.KILL -> RedAccent
+        CommandCategory.FAVORITES -> BlueAccent
         else -> GreenAccent
     }
 
@@ -66,14 +74,22 @@ fun ControlScreen(
             TopAppBar(
                 title = {
                     Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("🎯", fontSize = 14.sp)
+                            Text(
+                                user.name,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         Text(
-                            "🎯 ${user.name}",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-                        Text(
-                            "Game: ${user.game} • HP: ${user.hp}%",
+                            "HP: ${user.hp}%  •  Game: ${user.game}",
                             color = TextSecondary,
                             fontSize = 11.sp
                         )
@@ -81,15 +97,20 @@ fun ControlScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = GreenAccent)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = BlueAccent)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BgCard),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = NavyCard),
                 actions = {
-                    if (state.isAdminActive) {
-                        Text("👑", fontSize = 18.sp, modifier = Modifier.padding(end = 12.dp))
-                    } else if (state.isVipActive) {
-                        Text("⭐", fontSize = 18.sp, modifier = Modifier.padding(end = 12.dp))
+                    when {
+                        state.isAdminActive -> Text(
+                            "👑", fontSize = 20.sp,
+                            modifier = Modifier.padding(end = 12.dp)
+                        )
+                        state.isVipActive -> Text(
+                            "⭐", fontSize = 20.sp,
+                            modifier = Modifier.padding(end = 12.dp)
+                        )
                     }
                 }
             )
@@ -104,15 +125,17 @@ fun ControlScreen(
                 ) {
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (resultSnack!!.startsWith("✓")) GreenAccent.copy(alpha = 0.9f)
-                            else if (resultSnack!!.startsWith("▶")) GreenAccent.copy(alpha = 0.7f)
-                            else RedAccent.copy(alpha = 0.9f)
+                            containerColor = when {
+                                resultSnack!!.startsWith("✓") -> GreenAccent.copy(alpha = 0.92f)
+                                resultSnack!!.startsWith("▶") -> BlueAccent.copy(alpha = 0.9f)
+                                else -> RedAccent.copy(alpha = 0.92f)
+                            }
                         ),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
                             resultSnack!!,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                             color = BgDark,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
@@ -127,17 +150,16 @@ fun ControlScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Category tabs
             CategoryTabs(
                 selected = selectedCategory,
                 isVipActive = state.isVipActive,
                 isAdminActive = state.isAdminActive,
+                favCount = state.favoriteCommands.size,
                 onSelect = { selectedCategory = it }
             )
 
-            Divider(color = Divider, thickness = 1.dp)
+            HorizontalDivider(color = Divider, thickness = 1.dp)
 
-            // Content
             when (selectedCategory) {
                 CommandCategory.COMBO -> ComboPanel(
                     combos = COMBO_COMMANDS,
@@ -145,29 +167,51 @@ fun ControlScreen(
                     accentColor = accentColor,
                     onCombo = onCombo
                 )
+                CommandCategory.FAVORITES -> {
+                    val favCmds = COMMANDS.filter { it.id in state.favoriteCommands }
+                    if (favCmds.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("⭐", fontSize = 48.sp)
+                                Spacer(Modifier.height(12.dp))
+                                Text("Нет избранных команд", color = TextSecondary, fontSize = 14.sp)
+                                Text("Нажмите ★ на команде чтобы добавить", color = TextSecondary, fontSize = 12.sp)
+                            }
+                        }
+                    } else {
+                        CommandGrid(
+                            commands = favCmds,
+                            isVipActive = state.isVipActive,
+                            isAdminActive = state.isAdminActive,
+                            accentColor = accentColor,
+                            favoriteIds = state.favoriteCommands,
+                            onCommandClick = { cmd ->
+                                if (cmd.params.isEmpty()) onCommand(cmd.id, emptyMap())
+                                else commandDialog = cmd
+                            },
+                            onToggleFavorite = onToggleFavorite
+                        )
+                    }
+                }
                 else -> CommandGrid(
                     commands = COMMANDS.filter { it.category == selectedCategory },
                     isVipActive = state.isVipActive,
                     isAdminActive = state.isAdminActive,
                     accentColor = accentColor,
+                    favoriteIds = state.favoriteCommands,
                     onCommandClick = { cmd ->
-                        if (cmd.params.isEmpty()) {
-                            onCommand(cmd.id, emptyMap())
-                        } else {
-                            commandDialog = cmd
-                        }
-                    }
+                        if (cmd.params.isEmpty()) onCommand(cmd.id, emptyMap())
+                        else commandDialog = cmd
+                    },
+                    onToggleFavorite = onToggleFavorite
                 )
             }
         }
     }
 
-    // Command dialog for params
     commandDialog?.let { cmd ->
         CommandParamDialog(
             command = cmd,
-            isVipActive = state.isVipActive,
-            isAdminActive = state.isAdminActive,
             onDismiss = { commandDialog = null },
             onConfirm = { params ->
                 commandDialog = null
@@ -184,13 +228,14 @@ fun CategoryTabs(
     selected: CommandCategory,
     isVipActive: Boolean,
     isAdminActive: Boolean,
+    favCount: Int,
     onSelect: (CommandCategory) -> Unit
 ) {
     val scrollState = rememberScrollState()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(BgCard)
+            .background(NavyCard)
             .horizontalScroll(scrollState)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -198,25 +243,31 @@ fun CategoryTabs(
         CommandCategory.values().forEach { cat ->
             val locked = (cat == CommandCategory.VIP && !isVipActive && !isAdminActive) ||
                     (cat == CommandCategory.ADMIN && !isAdminActive)
-            val accentColor = when (cat) {
+            val tabColor = when (cat) {
                 CommandCategory.VIP -> OrangeAccent
                 CommandCategory.ADMIN -> PurpleAccent
                 CommandCategory.KILL -> RedAccent
+                CommandCategory.FAVORITES -> BlueAccent
                 else -> GreenAccent
             }
             val isSelected = cat == selected
+            val label = if (cat == CommandCategory.FAVORITES && favCount > 0)
+                "${cat.emoji} ${cat.label} ($favCount)"
+            else
+                "${if (locked) "🔒" else cat.emoji} ${cat.label}"
+
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (isSelected) accentColor.copy(alpha = 0.2f) else Color.Transparent)
-                    .border(1.dp, if (isSelected) accentColor else Divider, RoundedCornerShape(8.dp))
+                    .background(if (isSelected) tabColor.copy(alpha = 0.18f) else Color.Transparent)
+                    .border(1.dp, if (isSelected) tabColor else Divider, RoundedCornerShape(8.dp))
                     .clickable { onSelect(cat) }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "${if (locked) "🔒" else cat.emoji} ${cat.label}",
-                    color = if (isSelected) accentColor else TextSecondary,
+                    text = label,
+                    color = if (isSelected) tabColor else TextSecondary,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                 )
@@ -231,7 +282,9 @@ fun CommandGrid(
     isVipActive: Boolean,
     isAdminActive: Boolean,
     accentColor: Color,
-    onCommandClick: (Command) -> Unit
+    favoriteIds: Set<String>,
+    onCommandClick: (Command) -> Unit,
+    onToggleFavorite: (String) -> Unit
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
@@ -247,6 +300,8 @@ fun CommandGrid(
                 command = cmd,
                 locked = locked,
                 accentColor = accentColor,
+                isFavorite = cmd.id in favoriteIds,
+                onToggleFavorite = { onToggleFavorite(cmd.id) },
                 onClick = { if (!locked) onCommandClick(cmd) }
             )
         }
@@ -258,11 +313,12 @@ fun CommandButton(
     command: Command,
     locked: Boolean,
     accentColor: Color,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onClick: () -> Unit
 ) {
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (pressed) 0.93f else 1f, label = "btn")
-    val borderAlpha by animateFloatAsState(if (pressed) 0.8f else 0.25f, label = "border")
 
     Card(
         modifier = Modifier
@@ -280,33 +336,50 @@ fun CommandButton(
         shape = RoundedCornerShape(10.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (locked) Divider.copy(alpha = 0.3f) else accentColor.copy(alpha = borderAlpha)
+            if (locked) Divider.copy(alpha = 0.3f)
+            else if (isFavorite) BlueAccent.copy(alpha = 0.5f)
+            else accentColor.copy(alpha = 0.22f)
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = if (locked) "🔒" else command.emoji,
-                fontSize = 24.sp,
-                color = if (locked) TextSecondary.copy(alpha = 0.4f) else Color.Unspecified
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = command.name,
-                fontSize = 10.sp,
-                color = if (locked) TextSecondary.copy(alpha = 0.4f) else TextPrimary,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 13.sp
-            )
-            if (command.params.isNotEmpty()) {
-                Spacer(Modifier.height(2.dp))
-                Text("⚙", fontSize = 8.sp, color = accentColor.copy(alpha = 0.6f))
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 8.dp, start = 6.dp, end = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = if (locked) "🔒" else command.emoji,
+                    fontSize = 22.sp,
+                    color = if (locked) TextSecondary.copy(alpha = 0.4f) else Color.Unspecified
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = command.name,
+                    fontSize = 10.sp,
+                    color = if (locked) TextSecondary.copy(alpha = 0.4f) else TextPrimary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 13.sp
+                )
+                if (command.params.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text("⚙", fontSize = 8.sp, color = accentColor.copy(alpha = 0.5f))
+                }
+            }
+            // Favorite star
+            if (!locked) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = "Favorite",
+                    tint = if (isFavorite) BlueAccent else TextSecondary.copy(alpha = 0.4f),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(18.dp)
+                        .padding(top = 3.dp, end = 3.dp)
+                        .clickable { onToggleFavorite() }
+                )
             }
         }
     }
@@ -354,7 +427,10 @@ fun ComboCard(combo: ComboCommand, isRunning: Boolean, onClick: () -> Unit) {
             },
         colors = CardDefaults.cardColors(containerColor = BgCard),
         shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, GreenAccent.copy(alpha = 0.3f))
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isRunning) BlueAccent.copy(alpha = 0.5f) else Divider
+        )
     ) {
         Column(
             modifier = Modifier
@@ -369,10 +445,7 @@ fun ComboCard(combo: ComboCommand, isRunning: Boolean, onClick: () -> Unit) {
                 color = TextPrimary, textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(4.dp))
-            Text(
-                "${combo.steps.size} шагов",
-                fontSize = 10.sp, color = TextSecondary
-            )
+            Text("${combo.steps.size} шагов", fontSize = 10.sp, color = TextSecondary)
             Spacer(Modifier.height(6.dp))
             Text(
                 combo.steps.joinToString(" → ") { it.action },
@@ -397,8 +470,6 @@ fun ComboCard(combo: ComboCommand, isRunning: Boolean, onClick: () -> Unit) {
 @Composable
 fun CommandParamDialog(
     command: Command,
-    isVipActive: Boolean,
-    isAdminActive: Boolean,
     soundPresets: List<Pair<String, String>>,
     chatPresets: List<String>,
     onDismiss: () -> Unit,
@@ -412,9 +483,9 @@ fun CommandParamDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            colors = CardDefaults.cardColors(containerColor = BgSurface),
+            colors = CardDefaults.cardColors(containerColor = NavyCard),
             shape = RoundedCornerShape(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, GreenAccent.copy(alpha = 0.4f))
+            border = androidx.compose.foundation.BorderStroke(1.dp, BlueAccent.copy(alpha = 0.4f))
         ) {
             Column(
                 modifier = Modifier
@@ -423,7 +494,7 @@ fun CommandParamDialog(
             ) {
                 Text(
                     "${command.emoji} ${command.name}",
-                    color = GreenAccent,
+                    color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
@@ -438,17 +509,16 @@ fun CommandParamDialog(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GreenAccent,
+                            focusedBorderColor = BlueAccent,
                             unfocusedBorderColor = Divider,
                             focusedTextColor = TextPrimary,
                             unfocusedTextColor = TextPrimary,
-                            cursorColor = GreenAccent
+                            cursorColor = BlueAccent
                         )
                     )
                     Spacer(Modifier.height(12.dp))
                 }
 
-                // Sound presets
                 if (soundPresets.isNotEmpty()) {
                     Text("Пресеты звуков:", color = TextSecondary, fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
@@ -460,12 +530,13 @@ fun CommandParamDialog(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(GreenAccent.copy(alpha = 0.12f))
+                                            .background(BlueAccent.copy(alpha = 0.1f))
+                                            .border(1.dp, BlueAccent.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
                                             .clickable { paramValues["id"] = id }
                                             .padding(6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(name, fontSize = 10.sp, color = GreenAccent, textAlign = TextAlign.Center)
+                                        Text(name, fontSize = 10.sp, color = BlueAccent, textAlign = TextAlign.Center)
                                     }
                                 }
                                 if (row.size == 1) Spacer(Modifier.weight(1f))
@@ -475,7 +546,6 @@ fun CommandParamDialog(
                     Spacer(Modifier.height(12.dp))
                 }
 
-                // Chat presets
                 if (chatPresets.isNotEmpty()) {
                     Text("Пресеты сообщений:", color = TextSecondary, fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
@@ -485,7 +555,8 @@ fun CommandParamDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(GreenAccent.copy(alpha = 0.08f))
+                                    .background(BgSurface)
+                                    .border(1.dp, Divider, RoundedCornerShape(6.dp))
                                     .clickable { paramValues["message"] = msg }
                                     .padding(8.dp)
                             ) {
@@ -511,9 +582,9 @@ fun CommandParamDialog(
                     Button(
                         onClick = { onConfirm(paramValues.toMap()) },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = GreenAccent)
+                        colors = ButtonDefaults.buttonColors(containerColor = BlueAccent)
                     ) {
-                        Text("▶ Запустить", color = BgDark, fontWeight = FontWeight.Bold)
+                        Text("▶ Запустить", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }

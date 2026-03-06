@@ -1,6 +1,7 @@
 package com.trollmaster.pro.data.model
 
 enum class CommandCategory(val label: String, val emoji: String) {
+    FAVORITES("Избранное", "⭐"),
     KILL("Убийства", "💀"),
     CONTROL("Контроль", "🕹️"),
     MODIFICATIONS("Модификации", "⚡"),

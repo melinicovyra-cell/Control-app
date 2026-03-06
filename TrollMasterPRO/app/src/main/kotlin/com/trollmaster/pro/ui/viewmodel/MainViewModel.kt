@@ -5,7 +5,6 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.trollmaster.pro.data.RelayRepository
-import com.trollmaster.pro.data.model.COMBO_COMMANDS
 import com.trollmaster.pro.data.model.ComboCommand
 import com.trollmaster.pro.data.model.UserInfo
 import com.trollmaster.pro.util.CryptoUtil
@@ -15,6 +14,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+data class HistoryEntry(
+    val action: String,
+    val target: String,
+    val timestampMs: Long = System.currentTimeMillis()
+)
 
 data class AppState(
     val users: List<UserInfo> = emptyList(),
@@ -27,7 +32,10 @@ data class AppState(
     val vipKey: String = "",
     val admKey: String = "",
     val relayUrl: String = DEFAULT_RELAY_URL,
-    val isComboRunning: Boolean = false
+    val isComboRunning: Boolean = false,
+    val favoriteCommands: Set<String> = emptySet(),
+    val commandHistory: List<HistoryEntry> = emptyList(),
+    val searchQuery: String = ""
 ) {
     companion object {
         const val DEFAULT_RELAY_URL = "https://api.npoint.io/d5decbe9a46d769f5419"
@@ -49,14 +57,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val savedAdmKey = prefs.getString("adm_key", "") ?: ""
         val isVip = prefs.getBoolean("is_vip", false)
         val isAdm = prefs.getBoolean("is_adm", false)
+        val savedFavorites = prefs.getStringSet("favorites", emptySet()) ?: emptySet()
 
         repository = RelayRepository(savedUrl)
         _state.value = _state.value.copy(
             relayUrl = savedUrl,
             vipKey = savedVipKey,
             admKey = savedAdmKey,
-            isVipActive = isVip,
-            isAdminActive = isAdm
+            isVipActive = isVip || isAdm,
+            isAdminActive = isAdm,
+            favoriteCommands = savedFavorites
         )
         startAutoRefresh()
     }
@@ -78,8 +88,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun fetchUsers() {
         val result = repository.fetchData()
         result.onSuccess { data ->
-            val current = _state.value
-            _state.value = current.copy(
+            _state.value = _state.value.copy(
                 users = data.users,
                 error = null,
                 isLoading = false
@@ -100,6 +109,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(selectedUser = null)
     }
 
+    fun setSearchQuery(query: String) {
+        _state.value = _state.value.copy(searchQuery = query)
+    }
+
     fun sendCommand(action: String, params: Map<String, String> = emptyMap()) {
         val state = _state.value
         val user = state.selectedUser ?: return
@@ -110,9 +123,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.value = _state.value.copy(lastCommandResult = null)
             val result = repository.sendCommand(user.name, action, params, vipHash, admHash)
             result.onSuccess {
-                _state.value = _state.value.copy(lastCommandResult = "✓ $action sent to ${user.name}")
+                val entry = HistoryEntry(action = action, target = user.name)
+                val history = (_state.value.commandHistory + entry).takeLast(50)
+                _state.value = _state.value.copy(
+                    lastCommandResult = "✓ $action → ${user.name}",
+                    commandHistory = history
+                )
             }.onFailure { e ->
-                _state.value = _state.value.copy(lastCommandResult = "✗ Error: ${e.message}")
+                _state.value = _state.value.copy(lastCommandResult = "✗ Ошибка: ${e.message}")
             }
         }
     }
@@ -126,16 +144,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val admHash = if (state.isAdminActive) CryptoUtil.sha256(state.admKey) else null
 
         viewModelScope.launch {
-            _state.value = _state.value.copy(isComboRunning = true, lastCommandResult = "▶ Running: ${combo.name}")
+            _state.value = _state.value.copy(isComboRunning = true, lastCommandResult = "▶ Запуск: ${combo.name}")
+            var success = true
             for ((idx, step) in combo.steps.withIndex()) {
                 if (step.delayMs > 0 && idx > 0) delay(step.delayMs)
-                repository.sendComboStep(user.name, step.action, step.params, vipHash, admHash)
+                val r = repository.sendComboStep(user.name, step.action, step.params, vipHash, admHash)
+                if (r.isFailure) { success = false; break }
             }
+            val msg = if (success) "✓ Комбо '${combo.name}' выполнено" else "✗ Комбо '${combo.name}' прервано"
+            val entry = HistoryEntry(action = "combo:${combo.name}", target = user.name)
             _state.value = _state.value.copy(
                 isComboRunning = false,
-                lastCommandResult = "✓ Combo '${combo.name}' complete"
+                lastCommandResult = msg,
+                commandHistory = (_state.value.commandHistory + entry).takeLast(50)
             )
         }
+    }
+
+    fun toggleFavorite(commandId: String) {
+        val current = _state.value.favoriteCommands.toMutableSet()
+        if (commandId in current) current.remove(commandId) else current.add(commandId)
+        prefs.edit().putStringSet("favorites", current).apply()
+        _state.value = _state.value.copy(favoriteCommands = current)
     }
 
     fun activateVip(key: String): Boolean {
@@ -148,9 +178,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun activateAdmin(key: String): Boolean {
         return if (CryptoUtil.verifyAdminKey(key)) {
-            // Admin also activates VIP implicitly but VIP key stays separate
-            prefs.edit().putString("adm_key", key).putBoolean("is_adm", true).apply()
-            _state.value = _state.value.copy(isAdminActive = true, admKey = key)
+            // ADMIN включает все VIP функции
+            prefs.edit()
+                .putString("adm_key", key).putBoolean("is_adm", true)
+                .putBoolean("is_vip", true)
+                .apply()
+            _state.value = _state.value.copy(isAdminActive = true, admKey = key, isVipActive = true)
             true
         } else false
     }
@@ -165,10 +198,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(isAdminActive = false, admKey = "")
     }
 
-    fun updateRelayUrl(url: String) {
+    fun updateRelayUrl(url: String): Boolean {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return false
         prefs.edit().putString("relay_url", url).apply()
         repository.updateUrl(url)
         _state.value = _state.value.copy(relayUrl = url)
+        return true
     }
 
     fun clearResult() {

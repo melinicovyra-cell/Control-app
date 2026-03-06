@@ -31,7 +31,7 @@ fun SettingsScreen(
     onActivateAdmin: (String) -> Boolean,
     onDeactivateVip: () -> Unit,
     onDeactivateAdmin: () -> Unit,
-    onUpdateRelayUrl: (String) -> Unit
+    onUpdateRelayUrl: (String) -> Boolean
 ) {
     var vipInput by remember { mutableStateOf("") }
     var admInput by remember { mutableStateOf("") }
@@ -43,26 +43,25 @@ fun SettingsScreen(
     var showVipKey by remember { mutableStateOf(false) }
     var showAdmKey by remember { mutableStateOf(false) }
     var relaySuccess by remember { mutableStateOf(false) }
+    var relayError by remember { mutableStateOf(false) }
 
-    LaunchedEffect(vipSuccess, admSuccess, relaySuccess) {
-        if (vipSuccess) { kotlinx.coroutines.delay(2000); vipSuccess = false }
-        if (admSuccess) { kotlinx.coroutines.delay(2000); admSuccess = false }
-        if (relaySuccess) { kotlinx.coroutines.delay(2000); relaySuccess = false }
-    }
+    LaunchedEffect(vipSuccess) { if (vipSuccess) { kotlinx.coroutines.delay(2000); vipSuccess = false } }
+    LaunchedEffect(admSuccess) { if (admSuccess) { kotlinx.coroutines.delay(2000); admSuccess = false } }
+    LaunchedEffect(relaySuccess) { if (relaySuccess) { kotlinx.coroutines.delay(2000); relaySuccess = false } }
 
     Scaffold(
         containerColor = BgDark,
         topBar = {
             TopAppBar(
                 title = {
-                    Text("⚙ Настройки", color = GreenAccent, fontWeight = FontWeight.Bold)
+                    Text("⚙ Настройки", color = TextPrimary, fontWeight = FontWeight.Bold)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = GreenAccent)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = BlueAccent)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BgCard)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = NavyCard)
             )
         }
     ) { padding ->
@@ -223,9 +222,16 @@ fun SettingsScreen(
                 AnimatedVisibility(relaySuccess) {
                     Text("✓ URL сохранён", color = GreenAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
+                AnimatedVisibility(relayError) {
+                    Text("✗ URL должен начинаться с http:// или https://", color = RedAccent, fontSize = 12.sp)
+                }
                 Spacer(Modifier.height(8.dp))
                 Button(
-                    onClick = { onUpdateRelayUrl(relayInput); relaySuccess = true },
+                    onClick = {
+                        relayError = false
+                        val ok = onUpdateRelayUrl(relayInput)
+                        if (ok) relaySuccess = true else relayError = true
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
                     enabled = relayInput.isNotBlank()
@@ -237,9 +243,11 @@ fun SettingsScreen(
             // Info card
             SettingsCard(title = "ℹ Информация", accentColor = TextSecondary) {
                 InfoRow("Версия", "4.0")
-                InfoRow("Min SDK", "Android 7.0 (API 24)")
+                InfoRow("Min SDK", "Android 8.0 (API 26)")
                 InfoRow("Relay", "npoint.io JSON API")
                 InfoRow("Auto-refresh", "2 секунды")
+                InfoRow("Избранных команд", "${state.favoriteCommands.size}")
+                InfoRow("История команд", "${state.commandHistory.size} / 50")
             }
         }
     }
@@ -248,13 +256,13 @@ fun SettingsScreen(
 @Composable
 fun SettingsCard(title: String, accentColor: androidx.compose.ui.graphics.Color, content: @Composable ColumnScope.() -> Unit) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = BgCard),
+        colors = CardDefaults.cardColors(containerColor = NavyCard),
         shape = RoundedCornerShape(14.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.25f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, color = accentColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            Divider(color = accentColor.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 10.dp))
+            HorizontalDivider(color = accentColor.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 10.dp))
             content()
         }
     }

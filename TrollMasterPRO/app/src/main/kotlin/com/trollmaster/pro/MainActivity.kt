@@ -65,12 +65,15 @@ class MainActivity : ComponentActivity() {
                                 viewModel.selectUser(user)
                                 screen = Screen.CONTROL
                             },
-                            onSettings = { screen = Screen.SETTINGS }
+                            onSettings = { screen = Screen.SETTINGS },
+                            onSearchChange = { viewModel.setSearchQuery(it) }
                         )
                         Screen.CONTROL -> ControlScreen(
                             state = state,
                             onCommand = { action, params -> viewModel.sendCommand(action, params) },
                             onCombo = { combo -> viewModel.runCombo(combo) },
+                            onToggleFavorite = { viewModel.toggleFavorite(it) },
+                            onClearResult = { viewModel.clearResult() },
                             onBack = {
                                 viewModel.clearSelection()
                                 screen = Screen.MAIN
