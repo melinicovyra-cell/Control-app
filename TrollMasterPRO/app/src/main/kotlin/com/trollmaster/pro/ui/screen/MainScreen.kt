@@ -5,9 +5,11 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -27,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +37,23 @@ import com.trollmaster.pro.data.model.UserInfo
 import com.trollmaster.pro.data.model.UserStatus
 import com.trollmaster.pro.ui.theme.*
 import com.trollmaster.pro.ui.viewmodel.AppState
+
+private enum class SortOption(val label: String, val emoji: String) {
+    DEFAULT("Онлайн", "📊"),
+    BY_NAME("A→Z", "🔤"),
+    BY_HP("HP↓", "❤"),
+    BY_STATUS("Статус", "●")
+}
+
+private val avatarPalette = listOf(
+    Color(0xFF4D7CFE),
+    Color(0xFF00C896),
+    Color(0xFFFF5252),
+    Color(0xFFFF9800),
+    Color(0xFF9C27B0),
+    Color(0xFF00BCD4),
+    Color(0xFFE91E8C)
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,13 +65,22 @@ fun MainScreen(
 ) {
     val pulseAnim = rememberInfiniteTransition(label = "pulse")
     val pulse = pulseAnim.animateFloat(
-        initialValue = 0.5f, targetValue = 1f, label = "p",
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse)
+        initialValue = 0.4f, targetValue = 1f, label = "p",
+        animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse)
     )
     val focusManager = LocalFocusManager.current
+    var sortOption by remember { mutableStateOf(SortOption.DEFAULT) }
 
-    val filteredUsers = if (state.searchQuery.isBlank()) state.users
-    else state.users.filter { it.name.contains(state.searchQuery, ignoreCase = true) }
+    val filteredUsers = remember(state.users, state.searchQuery, sortOption) {
+        val filtered = if (state.searchQuery.isBlank()) state.users
+        else state.users.filter { it.name.contains(state.searchQuery, ignoreCase = true) }
+        when (sortOption) {
+            SortOption.BY_NAME -> filtered.sortedBy { it.name.lowercase() }
+            SortOption.BY_HP -> filtered.sortedByDescending { it.hp }
+            SortOption.BY_STATUS -> filtered.sortedBy { it.status.ordinal }
+            SortOption.DEFAULT -> filtered
+        }
+    }
 
     Scaffold(
         containerColor = BgDark,
@@ -62,12 +91,12 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // K logo mini
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(NavyCard),
+                                .background(NavyCard)
+                                .border(1.dp, BlueAccent.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             KLogoShape(modifier = Modifier.size(26.dp))
@@ -121,7 +150,7 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Status bar
+            // Status bar with ripple dot and animated count
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -134,27 +163,53 @@ fun MainScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (state.error == null) GreenAccent.copy(alpha = pulse.value)
-                                else RedAccent
+                    // Ripple dot
+                    Box(contentAlignment = Alignment.Center) {
+                        if (state.error == null) {
+                            Box(
+                                modifier = Modifier
+                                    .size((8f + 8f * (1f - pulse.value)).dp)
+                                    .clip(CircleShape)
+                                    .background(GreenAccent.copy(alpha = pulse.value * 0.35f))
                             )
-                    )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (state.error == null) GreenAccent
+                                    else RedAccent
+                                )
+                        )
+                    }
                     Text(
-                        if (state.error == null) "LIVE • обновление 2с" else "ОШИБКА",
+                        if (state.error == null) "LIVE • 2с" else "ОШИБКА",
                         color = if (state.error == null) GreenAccent else RedAccent,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
-                Text(
-                    "${state.users.size} онлайн",
-                    color = TextSecondary,
-                    fontSize = 12.sp
-                )
+                // Animated user count
+                AnimatedContent(
+                    targetState = state.users.size,
+                    transitionSpec = {
+                        if (targetState > initialState) {
+                            slideInVertically { -it } + fadeIn() togetherWith
+                                    slideOutVertically { it } + fadeOut()
+                        } else {
+                            slideInVertically { it } + fadeIn() togetherWith
+                                    slideOutVertically { -it } + fadeOut()
+                        }
+                    },
+                    label = "count"
+                ) { count ->
+                    Text(
+                        "$count онлайн",
+                        color = if (count > 0) TextSecondary else RedAccent.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                }
             }
 
             // Error banner
@@ -203,6 +258,40 @@ fun MainScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
+            // Sort chips
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                SortOption.entries.forEach { option ->
+                    val isSelected = sortOption == option
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(if (isSelected) BlueAccent.copy(alpha = 0.15f) else BgCard)
+                            .border(
+                                1.dp,
+                                if (isSelected) BlueAccent.copy(alpha = 0.5f) else Divider,
+                                RoundedCornerShape(7.dp)
+                            )
+                            .clickable { sortOption = option }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            "${option.emoji} ${option.label}",
+                            fontSize = 11.sp,
+                            color = if (isSelected) BlueAccent else TextSecondary,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
             if (filteredUsers.isEmpty() && state.error == null) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -228,7 +317,7 @@ fun MainScreen(
                 ) {
                     item {
                         Text(
-                            if (state.searchQuery.isBlank()) "ОНЛАЙН" else "РЕЗУЛЬТАТЫ (${filteredUsers.size})",
+                            if (state.searchQuery.isBlank()) "ИГРОКИ" else "РЕЗУЛЬТАТЫ (${filteredUsers.size})",
                             color = TextSecondary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -258,9 +347,24 @@ fun UserCard(user: UserInfo, onSelect: () -> Unit) {
     val statusText = when (user.status) {
         UserStatus.LIVE -> "● LIVE"
         UserStatus.AFK -> "○ AFK"
-        UserStatus.OFFLINE -> "✕ OFFLINE"
+        UserStatus.OFFLINE -> "✕ OFF"
     }
     val isLive = user.status == UserStatus.LIVE
+
+    // Colored initials avatar
+    val avatarColor = avatarPalette[user.name.hashCode().let { if (it < 0) -it else it } % avatarPalette.size]
+    val initials = user.name.trim()
+        .split(Regex("\\s+"))
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        .joinToString("")
+        .ifEmpty { user.name.take(2).uppercase() }
+
+    val hpColor = when {
+        user.hp > 60 -> GreenAccent
+        user.hp > 30 -> OrangeAccent
+        else -> RedAccent
+    }
 
     Card(
         modifier = Modifier
@@ -283,7 +387,7 @@ fun UserCard(user: UserInfo, onSelect: () -> Unit) {
                 .then(
                     if (isLive) Modifier.background(
                         Brush.horizontalGradient(
-                            listOf(GreenAccent.copy(alpha = 0.04f), Color.Transparent)
+                            listOf(GreenAccent.copy(alpha = 0.05f), Color.Transparent)
                         )
                     ) else Modifier
                 )
@@ -294,23 +398,25 @@ fun UserCard(user: UserInfo, onSelect: () -> Unit) {
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar
+                // Colored initials avatar
                 Box(
                     modifier = Modifier
                         .size(50.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isLive) GreenAccent.copy(alpha = 0.1f)
-                            else BgSurface
-                        )
+                        .background(avatarColor.copy(alpha = if (isLive) 0.2f else 0.1f))
                         .border(
                             1.dp,
-                            if (isLive) GreenAccent.copy(alpha = 0.4f) else Divider,
+                            avatarColor.copy(alpha = if (isLive) 0.6f else 0.25f),
                             RoundedCornerShape(12.dp)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("👤", fontSize = 22.sp)
+                    Text(
+                        initials,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black,
+                        color = avatarColor
+                    )
                 }
 
                 Spacer(Modifier.width(12.dp))
@@ -325,51 +431,40 @@ fun UserCard(user: UserInfo, onSelect: () -> Unit) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(Modifier.height(3.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "🎮 ${user.game}",
-                            color = TextSecondary,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                    }
+                    Text(
+                        "🎮 ${user.game}",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Spacer(Modifier.height(6.dp))
                     // HP bar
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(3.dp)
+                            .height(4.dp)
                             .clip(RoundedCornerShape(2.dp))
                             .background(Divider)
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
-                                .fillMaxWidth(user.hp / 100f)
+                                .fillMaxWidth((user.hp / 100f).coerceIn(0f, 1f))
                                 .clip(RoundedCornerShape(2.dp))
                                 .background(
-                                    when {
-                                        user.hp > 60 -> GreenAccent
-                                        user.hp > 30 -> OrangeAccent
-                                        else -> RedAccent
-                                    }
+                                    Brush.horizontalGradient(
+                                        listOf(hpColor, hpColor.copy(alpha = 0.7f))
+                                    )
                                 )
                         )
                     }
                     Spacer(Modifier.height(3.dp))
                     Text(
                         "❤ ${user.hp}%",
-                        color = when {
-                            user.hp > 60 -> GreenAccent.copy(alpha = 0.8f)
-                            user.hp > 30 -> OrangeAccent
-                            else -> RedAccent
-                        },
-                        fontSize = 11.sp
+                        color = hpColor.copy(alpha = 0.85f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
 

@@ -1,7 +1,11 @@
 package com.trollmaster.pro.ui.screen
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -11,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -19,11 +24,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.trollmaster.pro.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlin.math.*
+import kotlin.random.Random
 
 val NavyDark = Color(0xFF0E1220)
 val NavyCard = Color(0xFF141828)
 val NavyBorder = Color(0xFF1E2840)
 val BlueAccent = Color(0xFF4D7CFE)
+
+private data class Particle(val x: Float, val y: Float, val phase: Float, val size: Float)
+
+private val particles = List(20) {
+    Particle(
+        x = Random.nextFloat(),
+        y = Random.nextFloat(),
+        phase = Random.nextFloat(),
+        size = Random.nextFloat() * 2f + 1f
+    )
+}
 
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
@@ -32,6 +50,11 @@ fun SplashScreen(onFinished: () -> Unit) {
     val subtitleAlpha = remember { Animatable(0f) }
     val glowAlpha = remember { Animatable(0f) }
 
+    var eggTaps by remember { mutableIntStateOf(0) }
+    var eggTriggered by remember { mutableStateOf(false) }
+    val eggScale = remember { Animatable(1f) }
+    val eggAlpha = remember { Animatable(0f) }
+
     LaunchedEffect(Unit) {
         scale.animateTo(1.12f, animationSpec = tween(500, easing = EaseOutBack))
         scale.animateTo(1f, animationSpec = tween(200, easing = EaseInOut))
@@ -39,8 +62,23 @@ fun SplashScreen(onFinished: () -> Unit) {
         glowAlpha.animateTo(0.6f, animationSpec = tween(400))
         delay(200)
         subtitleAlpha.animateTo(1f, animationSpec = tween(500))
-        delay(800)
+        delay(900)
         onFinished()
+    }
+
+    LaunchedEffect(eggTriggered) {
+        if (eggTriggered) {
+            eggAlpha.animateTo(1f, tween(150))
+            repeat(3) {
+                eggScale.animateTo(1.4f, tween(120))
+                eggScale.animateTo(0.9f, tween(120))
+            }
+            eggScale.animateTo(1f, tween(100))
+            delay(1500)
+            eggAlpha.animateTo(0f, tween(300))
+            eggTriggered = false
+            eggTaps = 0
+        }
     }
 
     Box(
@@ -54,21 +92,32 @@ fun SplashScreen(onFinished: () -> Unit) {
             ),
         contentAlignment = Alignment.Center
     ) {
+        // Floating particles background
+        FloatingParticles()
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // K logo box
+            // K logo — tap 7 times for easter egg
             Box(
                 modifier = Modifier.scale(scale.value),
                 contentAlignment = Alignment.Center
             ) {
-                // Glow effect
+                // Outer glow ring
                 Box(
                     modifier = Modifier
-                        .size(120.dp)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(BlueAccent.copy(alpha = glowAlpha.value * 0.15f))
+                        .size(130.dp)
+                        .clip(RoundedCornerShape(30.dp))
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    if (eggTriggered) Color(0xFFFF4444).copy(alpha = glowAlpha.value * 0.2f)
+                                    else BlueAccent.copy(alpha = glowAlpha.value * 0.12f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
                 )
                 // Icon background
                 Box(
@@ -76,14 +125,69 @@ fun SplashScreen(onFinished: () -> Unit) {
                         .size(108.dp)
                         .clip(RoundedCornerShape(24.dp))
                         .background(NavyCard)
-                        .alpha(alpha.value),
+                        .border(
+                            1.dp,
+                            if (eggTriggered) Color(0xFFFF4444).copy(alpha = 0.5f)
+                            else BlueAccent.copy(alpha = 0.3f),
+                            RoundedCornerShape(24.dp)
+                        )
+                        .alpha(alpha.value)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) {
+                            eggTaps++
+                            if (eggTaps >= 7) eggTriggered = true
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     KLogoShape(modifier = Modifier.size(72.dp))
                 }
+
+                // Progress dots for easter egg
+                if (eggTaps in 1..6) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .offset(y = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        repeat(7) { i ->
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(
+                                        if (i < eggTaps) BlueAccent
+                                        else Divider.copy(alpha = 0.5f)
+                                    )
+                            )
+                        }
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            // Easter egg message
+            Box(
+                modifier = Modifier
+                    .height(32.dp)
+                    .padding(top = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (eggAlpha.value > 0.01f) {
+                    Text(
+                        text = "🔥 RAGE MODE ACTIVATED 🔥",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFFFF4444),
+                        modifier = Modifier
+                            .scale(eggScale.value)
+                            .alpha(eggAlpha.value)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // App name
             Text(
@@ -116,7 +220,7 @@ fun SplashScreen(onFinished: () -> Unit) {
                 modifier = Modifier.alpha(subtitleAlpha.value)
             )
 
-            Spacer(modifier = Modifier.height(64.dp))
+            Spacer(modifier = Modifier.height(56.dp))
 
             LoadingDots(modifier = Modifier.alpha(subtitleAlpha.value))
 
@@ -134,16 +238,36 @@ fun SplashScreen(onFinished: () -> Unit) {
 }
 
 @Composable
+fun FloatingParticles(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "particles")
+    val time = infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 1f, label = "t",
+        animationSpec = infiniteRepeatable(tween(14000, easing = LinearEasing))
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        particles.forEach { p ->
+            val t = (time.value + p.phase) % 1f
+            val x = (p.x + sin((t * 2 * PI + p.phase * PI * 2).toFloat()) * 0.06f).coerceIn(0.02f, 0.98f) * size.width
+            val y = ((p.y - t * 0.25f + 1f) % 1f) * size.height
+            val fadeAlpha = (sin(t * PI) * 0.22f).coerceIn(0f, 0.25f)
+            drawCircle(
+                color = BlueAccent.copy(alpha = fadeAlpha),
+                radius = p.size * density,
+                center = Offset(x, y)
+            )
+        }
+    }
+}
+
+@Composable
 fun KLogoShape(modifier: Modifier = Modifier) {
     Box(modifier = modifier) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
-            val white = android.graphics.Color.WHITE.let {
-                androidx.compose.ui.graphics.Color(it)
-            }
+            val white = Color.White
 
-            // Scale from 108 viewport to actual size
             val sx = w / 108f
             val sy = h / 108f
 

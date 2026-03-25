@@ -1,8 +1,12 @@
 package com.trollmaster.pro.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,7 +17,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -44,6 +50,11 @@ fun SettingsScreen(
     var showAdmKey by remember { mutableStateOf(false) }
     var relaySuccess by remember { mutableStateOf(false) }
     var relayError by remember { mutableStateOf(false) }
+
+    // Easter egg: tap version 5 times
+    var versionTaps by remember { mutableIntStateOf(0) }
+    var devMode by remember { mutableStateOf(false) }
+    val devScale by animateFloatAsState(if (devMode) 1f else 0.95f, tween(300), label = "dev")
 
     LaunchedEffect(vipSuccess) { if (vipSuccess) { kotlinx.coroutines.delay(2000); vipSuccess = false } }
     LaunchedEffect(admSuccess) { if (admSuccess) { kotlinx.coroutines.delay(2000); admSuccess = false } }
@@ -240,14 +251,91 @@ fun SettingsScreen(
                 }
             }
 
+            // Command History card
+            if (state.commandHistory.isNotEmpty()) {
+                SettingsCard(title = "📜 История команд", accentColor = BlueAccent) {
+                    state.commandHistory.takeLast(10).reversed().forEachIndexed { index, entry ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 5.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    entry.action,
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "→ ${entry.target}",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Text(
+                                formatRelativeTime(entry.timestampMs),
+                                color = TextSecondary.copy(alpha = 0.55f),
+                                fontSize = 10.sp
+                            )
+                        }
+                        if (index < minOf(9, state.commandHistory.size - 1)) {
+                            HorizontalDivider(
+                                color = Divider.copy(alpha = 0.3f),
+                                modifier = Modifier.padding(vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Info card
             SettingsCard(title = "ℹ Информация", accentColor = TextSecondary) {
-                InfoRow("Версия", "4.0")
+                InfoRow("Версия", "4.0", onClick = {
+                    versionTaps++
+                    if (versionTaps >= 5) devMode = !devMode
+                })
                 InfoRow("Min SDK", "Android 8.0 (API 26)")
                 InfoRow("Relay", "npoint.io JSON API")
                 InfoRow("Auto-refresh", "2 секунды")
                 InfoRow("Избранных команд", "${state.favoriteCommands.size}")
                 InfoRow("История команд", "${state.commandHistory.size} / 50")
+            }
+
+            // Dev mode easter egg card
+            AnimatedVisibility(visible = devMode) {
+                SettingsCard(
+                    title = "🔓 DEV MODE",
+                    accentColor = BlueAccent
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .scale(devScale)
+                            .alpha(if (devMode) 1f else 0f)
+                    ) {
+                        Column {
+                            InfoRow("VIP Key hash", if (state.vipKey.isNotEmpty()) "✓ задан" else "—")
+                            InfoRow("Admin Key hash", if (state.admKey.isNotEmpty()) "✓ задан" else "—")
+                            InfoRow("Relay URL", state.relayUrl.take(25) + if (state.relayUrl.length > 25) "…" else "")
+                            InfoRow("VIP Active", if (state.isVipActive) "✓ да" else "нет")
+                            InfoRow("Admin Active", if (state.isAdminActive) "✓ да" else "нет")
+                            InfoRow("Favorites", "${state.favoriteCommands.size} команд")
+                            InfoRow("History entries", "${state.commandHistory.size}")
+                            if (state.commandHistory.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                Text("Последнее действие:", color = TextSecondary, fontSize = 11.sp)
+                                Text(
+                                    "${state.commandHistory.last().action} → ${state.commandHistory.last().target}",
+                                    color = BlueAccent,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -282,12 +370,32 @@ fun ActiveBadge(text: String, color: androidx.compose.ui.graphics.Color) {
 }
 
 @Composable
-fun InfoRow(label: String, value: String) {
+fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, color = TextSecondary, fontSize = 13.sp)
-        Text(value, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(
+            value,
+            color = TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = if (onClick != null) Modifier.clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick
+            ) else Modifier
+        )
+    }
+}
+
+private fun formatRelativeTime(timestampMs: Long): String {
+    val diff = System.currentTimeMillis() - timestampMs
+    return when {
+        diff < 60_000L -> "${diff / 1000}с"
+        diff < 3_600_000L -> "${diff / 60_000}м"
+        diff < 86_400_000L -> "${diff / 3_600_000}ч"
+        else -> "${diff / 86_400_000}д"
     }
 }

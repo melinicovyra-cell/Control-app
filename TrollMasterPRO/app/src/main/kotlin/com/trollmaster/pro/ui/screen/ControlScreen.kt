@@ -1,7 +1,10 @@
 package com.trollmaster.pro.ui.screen
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,9 +17,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
@@ -26,7 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,6 +59,8 @@ fun ControlScreen(
     var selectedCategory by remember { mutableStateOf(CommandCategory.KILL) }
     var commandDialog by remember { mutableStateOf<Command?>(null) }
     var resultSnack by remember { mutableStateOf<String?>(null) }
+    var commandSearch by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(state.lastCommandResult) {
         if (state.lastCommandResult != null) {
@@ -155,10 +166,48 @@ fun ControlScreen(
                 isVipActive = state.isVipActive,
                 isAdminActive = state.isAdminActive,
                 favCount = state.favoriteCommands.size,
-                onSelect = { selectedCategory = it }
+                onSelect = {
+                    selectedCategory = it
+                    commandSearch = ""
+                    focusManager.clearFocus()
+                }
             )
 
             HorizontalDivider(color = Divider, thickness = 1.dp)
+
+            // Command search bar (only for non-combo categories)
+            if (selectedCategory != CommandCategory.COMBO) {
+                OutlinedTextField(
+                    value = commandSearch,
+                    onValueChange = { commandSearch = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    placeholder = { Text("Поиск команды...", color = TextSecondary, fontSize = 13.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = {
+                        AnimatedVisibility(visible = commandSearch.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                            IconButton(onClick = { commandSearch = ""; focusManager.clearFocus() }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accentColor.copy(alpha = 0.6f),
+                        unfocusedBorderColor = Divider.copy(alpha = 0.5f),
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        cursorColor = accentColor,
+                        focusedContainerColor = BgCard,
+                        unfocusedContainerColor = BgCard
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
+                )
+            }
 
             when (selectedCategory) {
                 CommandCategory.COMBO -> ComboPanel(
@@ -168,8 +217,10 @@ fun ControlScreen(
                     onCombo = onCombo
                 )
                 CommandCategory.FAVORITES -> {
-                    val favCmds = COMMANDS.filter { it.id in state.favoriteCommands }
-                    if (favCmds.isEmpty()) {
+                    val favCmds = COMMANDS
+                        .filter { it.id in state.favoriteCommands }
+                        .filter { commandSearch.isBlank() || it.name.contains(commandSearch, ignoreCase = true) }
+                    if (state.favoriteCommands.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("⭐", fontSize = 48.sp)
@@ -177,6 +228,10 @@ fun ControlScreen(
                                 Text("Нет избранных команд", color = TextSecondary, fontSize = 14.sp)
                                 Text("Нажмите ★ на команде чтобы добавить", color = TextSecondary, fontSize = 12.sp)
                             }
+                        }
+                    } else if (favCmds.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("🔍 Не найдено", color = TextSecondary, fontSize = 14.sp)
                         }
                     } else {
                         CommandGrid(
@@ -193,18 +248,29 @@ fun ControlScreen(
                         )
                     }
                 }
-                else -> CommandGrid(
-                    commands = COMMANDS.filter { it.category == selectedCategory },
-                    isVipActive = state.isVipActive,
-                    isAdminActive = state.isAdminActive,
-                    accentColor = accentColor,
-                    favoriteIds = state.favoriteCommands,
-                    onCommandClick = { cmd ->
-                        if (cmd.params.isEmpty()) onCommand(cmd.id, emptyMap())
-                        else commandDialog = cmd
-                    },
-                    onToggleFavorite = onToggleFavorite
-                )
+                else -> {
+                    val cmds = COMMANDS
+                        .filter { it.category == selectedCategory }
+                        .filter { commandSearch.isBlank() || it.name.contains(commandSearch, ignoreCase = true) }
+                    if (cmds.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("🔍 Не найдено", color = TextSecondary, fontSize = 14.sp)
+                        }
+                    } else {
+                        CommandGrid(
+                            commands = cmds,
+                            isVipActive = state.isVipActive,
+                            isAdminActive = state.isAdminActive,
+                            accentColor = accentColor,
+                            favoriteIds = state.favoriteCommands,
+                            onCommandClick = { cmd ->
+                                if (cmd.params.isEmpty()) onCommand(cmd.id, emptyMap())
+                                else commandDialog = cmd
+                            },
+                            onToggleFavorite = onToggleFavorite
+                        )
+                    }
+                }
             }
         }
     }
