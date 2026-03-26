@@ -34,13 +34,11 @@ val BlueAccent = Color(0xFF4D7CFE)
 
 private data class Particle(val x: Float, val y: Float, val phase: Float, val size: Float)
 
-private val particles = List(20) {
-    Particle(
-        x = Random.nextFloat(),
-        y = Random.nextFloat(),
-        phase = Random.nextFloat(),
-        size = Random.nextFloat() * 2f + 1f
-    )
+private val bgParticles = List(22) {
+    Particle(Random.nextFloat(), Random.nextFloat(), Random.nextFloat(), Random.nextFloat() * 2f + 0.8f)
+}
+private val bgStars = List(80) {
+    Particle(Random.nextFloat(), Random.nextFloat(), Random.nextFloat(), Random.nextFloat() * 1.4f + 0.4f)
 }
 
 @Composable
@@ -49,89 +47,117 @@ fun SplashScreen(onFinished: () -> Unit) {
     val alpha = remember { Animatable(0f) }
     val subtitleAlpha = remember { Animatable(0f) }
     val glowAlpha = remember { Animatable(0f) }
+    val shakeX = remember { Animatable(0f) }
 
     var eggTaps by remember { mutableIntStateOf(0) }
     var eggTriggered by remember { mutableStateOf(false) }
-    val eggScale = remember { Animatable(1f) }
-    val eggAlpha = remember { Animatable(0f) }
+    val eggLogoScale = remember { Animatable(1f) }
+    val eggMsgAlpha = remember { Animatable(0f) }
+    var rageMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        scale.animateTo(1.12f, animationSpec = tween(500, easing = EaseOutBack))
-        scale.animateTo(1f, animationSpec = tween(200, easing = EaseInOut))
-        alpha.animateTo(1f, animationSpec = tween(300))
-        glowAlpha.animateTo(0.6f, animationSpec = tween(400))
-        delay(200)
-        subtitleAlpha.animateTo(1f, animationSpec = tween(500))
+        scale.animateTo(1.15f, tween(480, easing = EaseOutBack))
+        scale.animateTo(1f, tween(180, easing = EaseInOut))
+        alpha.animateTo(1f, tween(280))
+        glowAlpha.animateTo(0.7f, tween(380))
+        delay(180)
+        subtitleAlpha.animateTo(1f, tween(480))
         delay(900)
         onFinished()
     }
 
     LaunchedEffect(eggTriggered) {
-        if (eggTriggered) {
-            eggAlpha.animateTo(1f, tween(150))
-            repeat(3) {
-                eggScale.animateTo(1.4f, tween(120))
-                eggScale.animateTo(0.9f, tween(120))
-            }
-            eggScale.animateTo(1f, tween(100))
-            delay(1500)
-            eggAlpha.animateTo(0f, tween(300))
-            eggTriggered = false
-            eggTaps = 0
+        if (!eggTriggered) return@LaunchedEffect
+        rageMode = true
+        eggMsgAlpha.animateTo(1f, tween(120))
+        // Screen shake
+        for (i in 0 until 10) {
+            shakeX.animateTo(if (i % 2 == 0) 14f else -14f, tween(45))
         }
+        shakeX.animateTo(0f, tween(80))
+        // Logo bounce
+        repeat(3) {
+            eggLogoScale.animateTo(1.55f, tween(110))
+            eggLogoScale.animateTo(0.82f, tween(110))
+        }
+        eggLogoScale.animateTo(1f, tween(90))
+        delay(1800)
+        eggMsgAlpha.animateTo(0f, tween(350))
+        rageMode = false
+        eggTriggered = false
+        eggTaps = 0
     }
+
+    val bgColors = if (rageMode)
+        listOf(Color(0xFF3D0000), Color(0xFF1A0A0A), BgDark)
+    else
+        listOf(Color(0xFF141E3A), Color(0xFF0D1228), BgDark)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(NavyCard, BgDark),
-                    radius = 900f
-                )
-            ),
+            .background(Brush.radialGradient(bgColors, radius = 1100f)),
         contentAlignment = Alignment.Center
     ) {
-        // Floating particles background
+        // Twinkling star field
+        StarFieldCanvas()
+
+        // Rising blue particles
         FloatingParticles()
 
+        // Main content — shake offset applied here
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.offset(x = shakeX.value.dp)
         ) {
-            // K logo — tap 7 times for easter egg
+
+            // ── K Logo ──────────────────────────────────────────────
             Box(
                 modifier = Modifier.scale(scale.value),
                 contentAlignment = Alignment.Center
             ) {
-                // Outer glow ring
+                // Animated outer glow ring
+                val glowPulse = rememberInfiniteTransition(label = "gp")
+                val glowRing = glowPulse.animateFloat(
+                    120f, 134f, label = "gr",
+                    animationSpec = infiniteRepeatable(tween(1600), RepeatMode.Reverse)
+                )
                 Box(
                     modifier = Modifier
-                        .size(130.dp)
-                        .clip(RoundedCornerShape(30.dp))
+                        .size(glowRing.value.dp)
+                        .clip(RoundedCornerShape(32.dp))
                         .background(
                             Brush.radialGradient(
                                 listOf(
-                                    if (eggTriggered) Color(0xFFFF4444).copy(alpha = glowAlpha.value * 0.2f)
-                                    else BlueAccent.copy(alpha = glowAlpha.value * 0.12f),
+                                    if (rageMode) Color(0xFFFF2020).copy(alpha = 0.28f)
+                                    else BlueAccent.copy(alpha = 0.22f),
                                     Color.Transparent
                                 )
                             )
                         )
                 )
-                // Icon background
+                // Icon card
                 Box(
                     modifier = Modifier
                         .size(108.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(NavyCard)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    NavyCard,
+                                    if (rageMode) Color(0xFF280000) else Color(0xFF182244)
+                                )
+                            )
+                        )
                         .border(
-                            1.dp,
-                            if (eggTriggered) Color(0xFFFF4444).copy(alpha = 0.5f)
-                            else BlueAccent.copy(alpha = 0.3f),
+                            2.dp,
+                            if (rageMode) Color(0xFFFF2020).copy(alpha = 0.8f)
+                            else BlueAccent.copy(alpha = 0.45f),
                             RoundedCornerShape(24.dp)
                         )
                         .alpha(alpha.value)
+                        .scale(eggLogoScale.value)
                         .clickable(
                             indication = null,
                             interactionSource = remember { MutableInteractionSource() }
@@ -141,25 +167,28 @@ fun SplashScreen(onFinished: () -> Unit) {
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    KLogoShape(modifier = Modifier.size(72.dp))
+                    KLogoShape(
+                        modifier = Modifier.size(72.dp),
+                        tint = if (rageMode) Color(0xFFFF4444) else Color.White
+                    )
                 }
 
-                // Progress dots for easter egg
+                // Easter egg tap progress dots
                 if (eggTaps in 1..6) {
                     Row(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .offset(y = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            .offset(y = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         repeat(7) { i ->
+                            val filled = i < eggTaps
                             Box(
                                 modifier = Modifier
-                                    .size(5.dp)
+                                    .size(if (filled) 6.dp else 4.dp)
                                     .clip(RoundedCornerShape(3.dp))
                                     .background(
-                                        if (i < eggTaps) BlueAccent
-                                        else Divider.copy(alpha = 0.5f)
+                                        if (filled) BlueAccent else Divider.copy(alpha = 0.35f)
                                     )
                             )
                         }
@@ -167,69 +196,60 @@ fun SplashScreen(onFinished: () -> Unit) {
                 }
             }
 
-            // Easter egg message
-            Box(
-                modifier = Modifier
-                    .height(32.dp)
-                    .padding(top = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (eggAlpha.value > 0.01f) {
+            // ── Easter egg message slot ──────────────────────────────
+            Box(modifier = Modifier.height(38.dp), contentAlignment = Alignment.Center) {
+                if (eggMsgAlpha.value > 0.01f) {
                     Text(
-                        text = "🔥 RAGE MODE ACTIVATED 🔥",
-                        fontSize = 14.sp,
+                        "🔥  RAGE MODE  🔥",
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFFFF4444),
-                        modifier = Modifier
-                            .scale(eggScale.value)
-                            .alpha(eggAlpha.value)
+                        color = Color(0xFFFF3030),
+                        letterSpacing = 3.sp,
+                        modifier = Modifier.alpha(eggMsgAlpha.value)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // App name
+            // ── App title ────────────────────────────────────────────
             Text(
-                text = "TrollMaster",
-                fontSize = 34.sp,
+                "TrollMaster",
+                fontSize = 36.sp,
                 fontWeight = FontWeight.Black,
-                color = TextPrimary,
-                letterSpacing = 1.sp,
-                modifier = Modifier
-                    .scale(scale.value)
-                    .alpha(alpha.value)
+                color = if (rageMode) Color(0xFFFF4444) else TextPrimary,
+                letterSpacing = 1.5.sp,
+                modifier = Modifier.scale(scale.value).alpha(alpha.value)
             )
             Text(
-                text = "PRO",
-                fontSize = 16.sp,
+                "PRO",
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = BlueAccent,
-                letterSpacing = 10.sp,
-                modifier = Modifier
-                    .scale(scale.value)
-                    .alpha(alpha.value)
+                color = if (rageMode) Color(0xFFFF6666) else BlueAccent,
+                letterSpacing = 12.sp,
+                modifier = Modifier.scale(scale.value).alpha(alpha.value)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "v4.0",
-                fontSize = 13.sp,
+                "v4.0",
+                fontSize = 12.sp,
                 color = TextSecondary,
                 modifier = Modifier.alpha(subtitleAlpha.value)
             )
 
-            Spacer(modifier = Modifier.height(56.dp))
+            Spacer(Modifier.height(60.dp))
 
-            LoadingDots(modifier = Modifier.alpha(subtitleAlpha.value))
+            LoadingDots(
+                modifier = Modifier.alpha(subtitleAlpha.value),
+                rage = rageMode
+            )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(Modifier.height(10.dp))
 
             Text(
-                text = "Инициализация...",
+                if (rageMode) "АКТИВАЦИЯ ЯРОСТИ..." else "Инициализация...",
                 fontSize = 12.sp,
-                color = TextSecondary,
+                color = if (rageMode) Color(0xFFFF6666) else TextSecondary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.alpha(subtitleAlpha.value)
             )
@@ -237,100 +257,99 @@ fun SplashScreen(onFinished: () -> Unit) {
     }
 }
 
-@Composable
-fun FloatingParticles(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "particles")
-    val time = infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 1f, label = "t",
-        animationSpec = infiniteRepeatable(tween(14000, easing = LinearEasing))
-    )
+// ── Twinkling star field ─────────────────────────────────────────────────────
 
+@Composable
+fun StarFieldCanvas(modifier: Modifier = Modifier) {
+    val tr = rememberInfiniteTransition(label = "stars")
+    val time = tr.animateFloat(
+        0f, 1f, label = "t",
+        animationSpec = infiniteRepeatable(tween(5000, easing = LinearEasing))
+    )
     Canvas(modifier = modifier.fillMaxSize()) {
-        particles.forEach { p ->
-            val t = (time.value + p.phase) % 1f
-            val x = (p.x + sin((t * 2 * PI + p.phase * PI * 2).toFloat()) * 0.06f).coerceIn(0.02f, 0.98f) * size.width
-            val y = ((p.y - t * 0.25f + 1f) % 1f) * size.height
-            val fadeAlpha = (sin(t * PI.toFloat()) * 0.22f).coerceIn(0f, 0.25f)
-            drawCircle(
-                color = BlueAccent.copy(alpha = fadeAlpha),
-                radius = p.size * density,
-                center = Offset(x, y)
-            )
+        bgStars.forEach { s ->
+            val a = (sin((time.value + s.phase) * 2f * PI.toFloat()) * 0.5f + 0.5f) * 0.55f
+            drawCircle(Color.White.copy(alpha = a), s.size * density, Offset(s.x * size.width, s.y * size.height))
         }
     }
 }
 
+// ── Rising particles ─────────────────────────────────────────────────────────
+
 @Composable
-fun KLogoShape(modifier: Modifier = Modifier) {
+fun FloatingParticles(modifier: Modifier = Modifier) {
+    val tr = rememberInfiniteTransition(label = "fp")
+    val time = tr.animateFloat(
+        0f, 1f, label = "t",
+        animationSpec = infiniteRepeatable(tween(14000, easing = LinearEasing))
+    )
+    Canvas(modifier = modifier.fillMaxSize()) {
+        bgParticles.forEach { p ->
+            val t = (time.value + p.phase) % 1f
+            val x = (p.x + sin((t * 2f * PI + p.phase * PI * 2f).toFloat()) * 0.06f).coerceIn(0.02f, 0.98f) * size.width
+            val y = ((p.y - t * 0.25f + 1f) % 1f) * size.height
+            val a = (sin(t * PI.toFloat()) * 0.22f).coerceIn(0f, 0.25f)
+            drawCircle(BlueAccent.copy(alpha = a), p.size * density, Offset(x, y))
+        }
+    }
+}
+
+// ── K logo shape ─────────────────────────────────────────────────────────────
+
+@Composable
+fun KLogoShape(modifier: Modifier = Modifier, tint: Color = Color.White) {
     Box(modifier = modifier) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            val white = Color.White
-
-            val sx = w / 108f
-            val sy = h / 108f
-
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width; val h = size.height
+            val sx = w / 108f; val sy = h / 108f
             fun px(x: Float) = x * sx
             fun py(y: Float) = y * sy
 
-            // Left bar
             val barPath = androidx.compose.ui.graphics.Path().apply {
                 moveTo(px(24f), py(20f)); lineTo(px(34f), py(20f))
                 lineTo(px(34f), py(88f)); lineTo(px(24f), py(88f)); close()
             }
-            drawPath(barPath, white)
+            drawPath(barPath, tint)
 
-            // Upper inner
             val uInner = androidx.compose.ui.graphics.Path().apply {
                 moveTo(px(36f), py(32f)); lineTo(px(36f), py(54f))
                 lineTo(px(58f), py(47f)); lineTo(px(58f), py(27f)); close()
             }
-            drawPath(uInner, white)
+            drawPath(uInner, tint)
 
-            // Upper outer
             val uOuter = androidx.compose.ui.graphics.Path().apply {
                 moveTo(px(60f), py(26f)); lineTo(px(60f), py(46f))
                 lineTo(px(84f), py(38f)); lineTo(px(84f), py(20f)); close()
             }
-            drawPath(uOuter, white)
+            drawPath(uOuter, tint)
 
-            // Lower inner
             val lInner = androidx.compose.ui.graphics.Path().apply {
                 moveTo(px(36f), py(54f)); lineTo(px(36f), py(76f))
                 lineTo(px(58f), py(81f)); lineTo(px(58f), py(61f)); close()
             }
-            drawPath(lInner, white)
+            drawPath(lInner, tint)
 
-            // Lower outer
             val lOuter = androidx.compose.ui.graphics.Path().apply {
                 moveTo(px(60f), py(62f)); lineTo(px(60f), py(82f))
                 lineTo(px(84f), py(88f)); lineTo(px(84f), py(70f)); close()
             }
-            drawPath(lOuter, white)
+            drawPath(lOuter, tint)
         }
     }
 }
 
-@Composable
-fun LoadingDots(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "dots")
-    val dot1 = infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f, label = "d1",
-        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse)
-    )
-    val dot2 = infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f, label = "d2",
-        animationSpec = infiniteRepeatable(tween(600, delayMillis = 200), RepeatMode.Reverse)
-    )
-    val dot3 = infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f, label = "d3",
-        animationSpec = infiniteRepeatable(tween(600, delayMillis = 400), RepeatMode.Reverse)
-    )
+// ── Animated loading dots ────────────────────────────────────────────────────
 
+@Composable
+fun LoadingDots(modifier: Modifier = Modifier, rage: Boolean = false) {
+    val tr = rememberInfiniteTransition(label = "dots")
+    val d1 = tr.animateFloat(0.3f, 1f, label = "d1", animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse))
+    val d2 = tr.animateFloat(0.3f, 1f, label = "d2", animationSpec = infiniteRepeatable(tween(600, delayMillis = 200), RepeatMode.Reverse))
+    val d3 = tr.animateFloat(0.3f, 1f, label = "d3", animationSpec = infiniteRepeatable(tween(600, delayMillis = 400), RepeatMode.Reverse))
+    val color = if (rage) Color(0xFFFF4444) else BlueAccent
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("●", fontSize = 10.sp, color = BlueAccent.copy(alpha = dot1.value))
-        Text("●", fontSize = 10.sp, color = BlueAccent.copy(alpha = dot2.value))
-        Text("●", fontSize = 10.sp, color = BlueAccent.copy(alpha = dot3.value))
+        Text("●", fontSize = 10.sp, color = color.copy(alpha = d1.value))
+        Text("●", fontSize = 10.sp, color = color.copy(alpha = d2.value))
+        Text("●", fontSize = 10.sp, color = color.copy(alpha = d3.value))
     }
 }

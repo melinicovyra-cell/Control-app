@@ -5,6 +5,8 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -61,13 +64,35 @@ fun ControlScreen(
     var resultSnack by remember { mutableStateOf<String?>(null) }
     var commandSearch by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
+    var killStreak by remember { mutableIntStateOf(0) }
+    var streakMsg by remember { mutableStateOf("") }
 
     LaunchedEffect(state.lastCommandResult) {
         if (state.lastCommandResult != null) {
             resultSnack = state.lastCommandResult
+            when {
+                state.lastCommandResult!!.startsWith("✓") -> {
+                    killStreak++
+                    streakMsg = when (killStreak) {
+                        3 -> "🔥 ТРИПЛ x3!"
+                        5 -> "💀 ПЕНТА x5!"
+                        7 -> "⚡ ЛЕГЕНДА x7!"
+                        10 -> "👑 УЛЬТРА x10!"
+                        else -> ""
+                    }
+                }
+                state.lastCommandResult!!.startsWith("✗") -> {
+                    killStreak = 0
+                    streakMsg = ""
+                }
+            }
             kotlinx.coroutines.delay(2500)
             resultSnack = null
             onClearResult()
+            if (streakMsg.isNotEmpty()) {
+                kotlinx.coroutines.delay(600)
+                streakMsg = ""
+            }
         }
     }
 
@@ -113,15 +138,23 @@ fun ControlScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = NavyCard),
                 actions = {
+                    // Kill streak badge
+                    if (killStreak >= 3) {
+                        Text(
+                            "🔥 $killStreak",
+                            color = Color(0xFFFF6B00),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFFF6B00).copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
                     when {
-                        state.isAdminActive -> Text(
-                            "👑", fontSize = 20.sp,
-                            modifier = Modifier.padding(end = 12.dp)
-                        )
-                        state.isVipActive -> Text(
-                            "⭐", fontSize = 20.sp,
-                            modifier = Modifier.padding(end = 12.dp)
-                        )
+                        state.isAdminActive -> Text("👑", fontSize = 20.sp, modifier = Modifier.padding(end = 12.dp))
+                        state.isVipActive   -> Text("⭐", fontSize = 20.sp, modifier = Modifier.padding(end = 12.dp))
                     }
                 }
             )
@@ -161,6 +194,34 @@ fun ControlScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Combo running progress bar
+            if (state.isComboRunning) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BlueAccent,
+                    trackColor = NavyCard
+                )
+            }
+
+            // Achievement streak banner
+            AnimatedVisibility(
+                visible = streakMsg.isNotEmpty(),
+                enter = slideInVertically { -it } + fadeIn(),
+                exit = slideOutVertically { -it } + fadeOut()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(listOf(Color(0xFFFF6B00), Color(0xFFFF0080)))
+                        )
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(streakMsg, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
+                }
+            }
+
             CategoryTabs(
                 selected = selectedCategory,
                 isVipActive = state.isVipActive,
