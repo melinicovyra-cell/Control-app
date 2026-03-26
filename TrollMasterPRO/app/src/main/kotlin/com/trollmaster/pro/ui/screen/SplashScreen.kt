@@ -250,7 +250,7 @@ fun FloatingParticles(modifier: Modifier = Modifier) {
             val t = (time.value + p.phase) % 1f
             val x = (p.x + sin((t * 2 * PI + p.phase * PI * 2).toFloat()) * 0.06f).coerceIn(0.02f, 0.98f) * size.width
             val y = ((p.y - t * 0.25f + 1f) % 1f) * size.height
-            val fadeAlpha = (sin(t * PI) * 0.22f).coerceIn(0f, 0.25f)
+            val fadeAlpha = (sin(t * PI.toFloat()) * 0.22f).coerceIn(0f, 0.25f)
             drawCircle(
                 color = BlueAccent.copy(alpha = fadeAlpha),
                 radius = p.size * density,
