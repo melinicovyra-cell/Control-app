@@ -35,7 +35,10 @@ data class AppState(
     val isComboRunning: Boolean = false,
     val favoriteCommands: Set<String> = emptySet(),
     val commandHistory: List<HistoryEntry> = emptyList(),
-    val searchQuery: String = ""
+    val searchQuery: String = "",
+    val recentTargets: List<String> = emptyList(),
+    val kTapCount: Int = 0,
+    val vibrationEnabled: Boolean = true
 ) {
     companion object {
         const val DEFAULT_RELAY_URL = "https://api.npoint.io/d5decbe9a46d769f5419"
@@ -58,6 +61,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val isVip = prefs.getBoolean("is_vip", false)
         val isAdm = prefs.getBoolean("is_adm", false)
         val savedFavorites = prefs.getStringSet("favorites", emptySet()) ?: emptySet()
+        val savedRecents = prefs.getString("recent_targets", "")?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
+        val savedKTapCount = prefs.getInt("k_tap_count", 0)
+        val savedVibration = prefs.getBoolean("vibration_enabled", true)
 
         repository = RelayRepository(savedUrl)
         _state.value = _state.value.copy(
@@ -66,7 +72,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             admKey = savedAdmKey,
             isVipActive = isVip || isAdm,
             isAdminActive = isAdm,
-            favoriteCommands = savedFavorites
+            favoriteCommands = savedFavorites,
+            recentTargets = savedRecents,
+            kTapCount = savedKTapCount,
+            vibrationEnabled = savedVibration
         )
         startAutoRefresh()
     }
@@ -102,7 +111,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectUser(user: UserInfo) {
-        _state.value = _state.value.copy(selectedUser = user)
+        val updatedRecents = (listOf(user.name) + _state.value.recentTargets.filter { it != user.name }).take(3)
+        prefs.edit().putString("recent_targets", updatedRecents.joinToString("|")).apply()
+        _state.value = _state.value.copy(selectedUser = user, recentTargets = updatedRecents)
+    }
+
+    fun incrementKTap() {
+        val newCount = _state.value.kTapCount + 1
+        prefs.edit().putInt("k_tap_count", newCount).apply()
+        _state.value = _state.value.copy(kTapCount = newCount)
+    }
+
+    fun setVibrationEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("vibration_enabled", enabled).apply()
+        _state.value = _state.value.copy(vibrationEnabled = enabled)
     }
 
     fun clearSelection() {

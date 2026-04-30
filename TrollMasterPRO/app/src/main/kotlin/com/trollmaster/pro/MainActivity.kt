@@ -57,7 +57,9 @@ class MainActivity : ComponentActivity() {
                 ) { currentScreen ->
                     when (currentScreen) {
                         Screen.SPLASH -> SplashScreen(
-                            onFinished = { screen = Screen.MAIN }
+                            onFinished = { screen = Screen.MAIN },
+                            kTapCount = state.kTapCount,
+                            onKTap = { viewModel.incrementKTap() }
                         )
                         Screen.MAIN -> MainScreen(
                             state = state,
@@ -86,7 +88,8 @@ class MainActivity : ComponentActivity() {
                             onActivateAdmin = { key -> viewModel.activateAdmin(key) },
                             onDeactivateVip = { viewModel.deactivateVip() },
                             onDeactivateAdmin = { viewModel.deactivateAdmin() },
-                            onUpdateRelayUrl = { url -> viewModel.updateRelayUrl(url) }
+                            onUpdateRelayUrl = { url -> viewModel.updateRelayUrl(url) },
+                            onToggleVibration = { enabled -> viewModel.setVibrationEnabled(enabled) }
                         )
                     }
                 }

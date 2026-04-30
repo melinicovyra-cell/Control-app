@@ -37,7 +37,8 @@ fun SettingsScreen(
     onActivateAdmin: (String) -> Boolean,
     onDeactivateVip: () -> Unit,
     onDeactivateAdmin: () -> Unit,
-    onUpdateRelayUrl: (String) -> Boolean
+    onUpdateRelayUrl: (String) -> Boolean,
+    onToggleVibration: (Boolean) -> Unit = {}
 ) {
     var vipInput by remember { mutableStateOf("") }
     var admInput by remember { mutableStateOf("") }
@@ -251,6 +252,40 @@ fun SettingsScreen(
                 }
             }
 
+            // Notifications / Vibration card
+            SettingsCard(title = "📱 Уведомления", accentColor = BlueAccent) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            "Вибрация",
+                            color = TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "Тактильный отклик на команды",
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = state.vibrationEnabled,
+                        onCheckedChange = onToggleVibration,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = BgDark,
+                            checkedTrackColor = BlueAccent,
+                            uncheckedThumbColor = TextSecondary,
+                            uncheckedTrackColor = BgSurface,
+                            uncheckedBorderColor = Divider
+                        )
+                    )
+                }
+            }
+
             // Command History card
             if (state.commandHistory.isNotEmpty()) {
                 SettingsCard(title = "📜 История команд", accentColor = BlueAccent) {
@@ -302,6 +337,8 @@ fun SettingsScreen(
                 InfoRow("Auto-refresh", "2 секунды")
                 InfoRow("Избранных команд", "${state.favoriteCommands.size}")
                 InfoRow("История команд", "${state.commandHistory.size} / 50")
+                InfoRow("Тапов на K", "${state.kTapCount}${if (state.kTapCount >= 100) " ⭐" else ""}")
+                InfoRow("Недавние цели", "${state.recentTargets.size}")
             }
 
             // Dev mode easter egg card

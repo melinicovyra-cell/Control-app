@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.trollmaster.pro.ui.theme.*
 import kotlinx.coroutines.delay
+import java.util.Calendar
 import kotlin.math.*
 import kotlin.random.Random
 
@@ -41,8 +42,16 @@ private val bgStars = List(80) {
     Particle(Random.nextFloat(), Random.nextFloat(), Random.nextFloat(), Random.nextFloat() * 1.4f + 0.4f)
 }
 
+private val snowflakes = List(14) {
+    Particle(Random.nextFloat(), Random.nextFloat(), Random.nextFloat(), Random.nextFloat() * 2.5f + 1.5f)
+}
+
 @Composable
-fun SplashScreen(onFinished: () -> Unit) {
+fun SplashScreen(
+    onFinished: () -> Unit,
+    kTapCount: Int = 0,
+    onKTap: () -> Unit = {}
+) {
     val scale = remember { Animatable(0f) }
     val alpha = remember { Animatable(0f) }
     val subtitleAlpha = remember { Animatable(0f) }
@@ -54,6 +63,15 @@ fun SplashScreen(onFinished: () -> Unit) {
     val eggLogoScale = remember { Animatable(1f) }
     val eggMsgAlpha = remember { Animatable(0f) }
     var rageMode by remember { mutableStateOf(false) }
+
+    // Time-based visuals
+    val cal = remember { Calendar.getInstance() }
+    val hour = remember { cal.get(Calendar.HOUR_OF_DAY) }
+    val month = remember { cal.get(Calendar.MONTH) }
+    val day = remember { cal.get(Calendar.DAY_OF_MONTH) }
+    val isNight = hour >= 23 || hour <= 1
+    val isNewYear = (month == Calendar.DECEMBER && day >= 25) || (month == Calendar.JANUARY && day <= 7)
+    val showStar = kTapCount >= 100
 
     LaunchedEffect(Unit) {
         scale.animateTo(1.15f, tween(480, easing = EaseOutBack))
@@ -104,6 +122,19 @@ fun SplashScreen(onFinished: () -> Unit) {
 
         // Rising blue particles
         FloatingParticles()
+
+        // New Year snowflakes
+        if (isNewYear) Snowflakes()
+
+        // Night moon
+        if (isNight) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(top = 40.dp, end = 30.dp),
+                contentAlignment = Alignment.TopEnd
+            ) {
+                Text("🌙", fontSize = 36.sp)
+            }
+        }
 
         // Main content — shake offset applied here
         Column(
@@ -163,6 +194,7 @@ fun SplashScreen(onFinished: () -> Unit) {
                             interactionSource = remember { MutableInteractionSource() }
                         ) {
                             eggTaps++
+                            onKTap()
                             if (eggTaps >= 7) eggTriggered = true
                         },
                     contentAlignment = Alignment.Center
@@ -211,14 +243,22 @@ fun SplashScreen(onFinished: () -> Unit) {
             }
 
             // ── App title ────────────────────────────────────────────
-            Text(
-                "TrollMaster",
-                fontSize = 36.sp,
-                fontWeight = FontWeight.Black,
-                color = if (rageMode) Color(0xFFFF4444) else TextPrimary,
-                letterSpacing = 1.5.sp,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.scale(scale.value).alpha(alpha.value)
-            )
+            ) {
+                Text(
+                    "TrollMaster",
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Black,
+                    color = if (rageMode) Color(0xFFFF4444) else TextPrimary,
+                    letterSpacing = 1.5.sp
+                )
+                if (showStar) {
+                    Text("⭐", fontSize = 20.sp)
+                }
+            }
             Text(
                 "PRO",
                 fontSize = 15.sp,
@@ -270,6 +310,29 @@ fun StarFieldCanvas(modifier: Modifier = Modifier) {
         bgStars.forEach { s ->
             val a = (sin((time.value + s.phase) * 2f * PI.toFloat()) * 0.5f + 0.5f) * 0.55f
             drawCircle(Color.White.copy(alpha = a), s.size * density, Offset(s.x * size.width, s.y * size.height))
+        }
+    }
+}
+
+// ── Snowflakes (new year easter egg) ─────────────────────────────────────────
+
+@Composable
+fun Snowflakes(modifier: Modifier = Modifier) {
+    val tr = rememberInfiniteTransition(label = "snow")
+    val time = tr.animateFloat(
+        0f, 1f, label = "t",
+        animationSpec = infiniteRepeatable(tween(8000, easing = LinearEasing))
+    )
+    Canvas(modifier = modifier.fillMaxSize()) {
+        snowflakes.forEach { s ->
+            val t = (time.value + s.phase) % 1f
+            val x = (s.x + sin((t * 2f * PI + s.phase * PI * 4f).toFloat()) * 0.05f).coerceIn(0.02f, 0.98f) * size.width
+            val y = (t * size.height)
+            drawCircle(
+                Color.White.copy(alpha = 0.7f),
+                s.size * density,
+                Offset(x, y)
+            )
         }
     }
 }

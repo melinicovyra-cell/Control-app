@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -47,6 +48,7 @@ import androidx.compose.ui.window.Dialog
 import com.trollmaster.pro.data.model.*
 import com.trollmaster.pro.ui.theme.*
 import com.trollmaster.pro.ui.viewmodel.AppState
+import com.trollmaster.pro.util.VibrationHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +66,7 @@ fun ControlScreen(
     var resultSnack by remember { mutableStateOf<String?>(null) }
     var commandSearch by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
+    val ctx = LocalContext.current
     var killStreak by remember { mutableIntStateOf(0) }
     var streakMsg by remember { mutableStateOf("") }
 
@@ -72,6 +75,7 @@ fun ControlScreen(
             resultSnack = state.lastCommandResult
             when {
                 state.lastCommandResult!!.startsWith("✓") -> {
+                    if (state.vibrationEnabled) VibrationHelper.success(ctx)
                     killStreak++
                     streakMsg = when (killStreak) {
                         3 -> "🔥 ТРИПЛ x3!"
@@ -82,6 +86,7 @@ fun ControlScreen(
                     }
                 }
                 state.lastCommandResult!!.startsWith("✗") -> {
+                    if (state.vibrationEnabled) VibrationHelper.error(ctx)
                     killStreak = 0
                     streakMsg = ""
                 }

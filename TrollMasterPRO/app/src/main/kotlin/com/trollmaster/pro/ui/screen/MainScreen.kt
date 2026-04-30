@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.trollmaster.pro.data.model.UserInfo
 import com.trollmaster.pro.data.model.UserStatus
+import com.trollmaster.pro.ui.component.SkeletonList
 import com.trollmaster.pro.ui.theme.*
 import com.trollmaster.pro.ui.viewmodel.AppState
 
@@ -57,6 +58,10 @@ fun MainScreen(
     onSettings: () -> Unit,
     onSearchChange: (String) -> Unit
 ) {
+    val avgHp = remember(state.users) {
+        val live = state.users.filter { it.hp > 0 }
+        if (live.isEmpty()) 0 else live.sumOf { it.hp } / live.size
+    }
     val pulseAnim = rememberInfiniteTransition(label = "pulse")
     val pulse = pulseAnim.animateFloat(
         0.4f, 1f, label = "p",
@@ -182,15 +187,50 @@ fun MainScreen(
                 }
             }
 
-            // ── Stats chips ──────────────────────────────────────────
+            // ── Hero stats card ──────────────────────────────────────
             if (state.users.isNotEmpty()) {
+                HeroStatsCard(
+                    total = state.users.size,
+                    live = liveCount,
+                    avgHp = avgHp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     StatChip(liveCount, "LIVE", GreenAccent)
                     StatChip(afkCount, "AFK", OrangeAccent)
                     StatChip(offCount, "OFFLINE", TextSecondary)
+                }
+            }
+
+            // ── Recent targets row ───────────────────────────────────
+            if (state.recentTargets.isNotEmpty()) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Text(
+                        "НЕДАВНИЕ ЦЕЛИ",
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        state.recentTargets.forEach { name ->
+                            RecentTargetChip(
+                                name = name,
+                                isOnline = state.users.any { it.name == name },
+                                onClick = {
+                                    state.users.firstOrNull { it.name == name }?.let(onSelectUser)
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -247,18 +287,19 @@ fun MainScreen(
 
             // ── User list ────────────────────────────────────────────
             if (filteredUsers.isEmpty() && state.error == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (state.searchQuery.isNotBlank()) {
+                if (state.searchQuery.isNotBlank()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("🔍", fontSize = 48.sp)
                             Spacer(Modifier.height(12.dp))
                             Text("Никого не найдено", color = TextSecondary, fontSize = 14.sp)
-                        } else {
-                            LoadingDots()
-                            Spacer(Modifier.height(12.dp))
-                            Text("Поиск игроков...", color = TextSecondary, fontSize = 14.sp)
                         }
                     }
+                } else {
+                    SkeletonList(
+                        count = 4,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
                 }
             } else {
                 LazyColumn(
@@ -278,6 +319,125 @@ fun MainScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+// ── Hero stats card ──────────────────────────────────────────────────────────
+
+@Composable
+private fun HeroStatsCard(total: Int, live: Int, avgHp: Int, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = NavyCard),
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BlueAccent.copy(alpha = 0.25f))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            NavyCard,
+                            BlueAccent.copy(alpha = 0.12f),
+                            NavyCard
+                        )
+                    )
+                )
+                .padding(vertical = 14.dp, horizontal = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HeroStatItem(value = total.toString(), label = "ВСЕГО", color = BlueAccent, modifier = Modifier.weight(1f))
+                HeroDivider()
+                HeroStatItem(value = live.toString(), label = "LIVE", color = GreenAccent, modifier = Modifier.weight(1f))
+                HeroDivider()
+                HeroStatItem(value = "$avgHp%", label = "СРЕД HP", color = OrangeAccent, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroStatItem(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            value,
+            color = color,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Black
+        )
+        Text(
+            label,
+            color = TextSecondary,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.5.sp
+        )
+    }
+}
+
+@Composable
+private fun HeroDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(36.dp)
+            .background(Divider.copy(alpha = 0.6f))
+    )
+}
+
+// ── Recent target chip ───────────────────────────────────────────────────────
+
+@Composable
+private fun RecentTargetChip(name: String, isOnline: Boolean, onClick: () -> Unit) {
+    val initials = name.trim().split(Regex("\\s+")).take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
+        .ifEmpty { name.take(2).uppercase() }
+    val color = avatarPalette[name.hashCode().let { if (it < 0) -it else it } % avatarPalette.size]
+
+    Row(
+        modifier = Modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (isOnline) color.copy(alpha = 0.15f) else BgCard)
+            .border(
+                1.dp,
+                if (isOnline) color.copy(alpha = 0.5f) else Divider,
+                RoundedCornerShape(18.dp)
+            )
+            .clickable(enabled = isOnline) { onClick() }
+            .padding(start = 4.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = if (isOnline) 0.3f else 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(initials, fontSize = 11.sp, fontWeight = FontWeight.Black, color = color)
+        }
+        Text(
+            name,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isOnline) TextPrimary else TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 100.dp)
+        )
+        if (!isOnline) {
+            Text("○", fontSize = 11.sp, color = TextSecondary)
         }
     }
 }
