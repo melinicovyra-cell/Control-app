@@ -468,7 +468,6 @@ fun UserCard(user: UserInfo, onSelect: () -> Unit) {
     val cardScale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "cs")
 
     val isLive = user.status == UserStatus.LIVE
-    val isAfk = user.status == UserStatus.AFK
     val isDanger = user.hp in 1..19
 
     val statusColor = when (user.status) {
@@ -491,127 +490,145 @@ fun UserCard(user: UserInfo, onSelect: () -> Unit) {
         .mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
         .ifEmpty { user.name.take(2).uppercase() }
 
-    // Animated HP fill — starts at 0, animates to actual value on composition
     val animHp by animateFloatAsState(
         targetValue = (user.hp / 100f).coerceIn(0f, 1f),
         animationSpec = tween(700, easing = FastOutSlowInEasing),
         label = "hp"
     )
 
-    // Danger pulse for low HP
     val dangerPulse = rememberInfiniteTransition(label = "dp")
     val dangerAlpha = dangerPulse.animateFloat(
         0.4f, 1f, label = "da",
         animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse)
     )
 
-    Card(
-        modifier = Modifier.fillMaxWidth().scale(cardScale).clickable { pressed = true; onSelect() },
-        colors = CardDefaults.cardColors(containerColor = BgCard),
-        shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            when {
-                isDanger && isLive -> RedAccent.copy(alpha = dangerAlpha.value * 0.7f)
-                isLive -> GreenAccent.copy(alpha = 0.35f)
-                else -> Divider
-            }
-        )
-    ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Left accent stripe
+    Box(modifier = Modifier.fillMaxWidth().scale(cardScale)) {
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { pressed = true; onSelect() },
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            shape = RoundedCornerShape(14.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                width = if (isLive || isDanger) 1.5.dp else 1.dp,
+                color = when {
+                    isDanger && isLive -> RedAccent.copy(alpha = dangerAlpha.value * 0.8f)
+                    isLive -> GreenAccent.copy(alpha = 0.45f)
+                    else -> Divider
+                }
+            )
+        ) {
             Box(
                 modifier = Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(statusColor, statusColor.copy(alpha = 0.2f))
-                        )
-                    )
-            )
-
-            Column(
-                modifier = Modifier
                     .fillMaxWidth()
-                    .then(
-                        if (isLive) Modifier.background(
-                            Brush.horizontalGradient(listOf(GreenAccent.copy(alpha = 0.04f), Color.Transparent))
-                        ) else Modifier
+                    .background(
+                        when {
+                            isDanger && isLive -> Brush.horizontalGradient(
+                                listOf(RedAccent.copy(alpha = 0.05f), BgCard, BgCard)
+                            )
+                            isLive -> Brush.horizontalGradient(
+                                listOf(GreenAccent.copy(alpha = 0.06f), BgCard, BgCard)
+                            )
+                            else -> Brush.horizontalGradient(listOf(BgCard, BgCard))
+                        }
                     )
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Initials avatar
+                Row(modifier = Modifier.fillMaxWidth()) {
                     Box(
                         modifier = Modifier
-                            .size(50.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(avatarColor.copy(alpha = if (isLive) 0.2f else 0.1f))
-                            .border(1.dp, avatarColor.copy(alpha = if (isLive) 0.55f else 0.22f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(initials, fontSize = 18.sp, fontWeight = FontWeight.Black, color = avatarColor)
-                    }
-
-                    Spacer(Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                user.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
+                            .width(4.dp)
+                            .fillMaxHeight()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(statusColor, statusColor.copy(alpha = 0.15f))
+                                )
                             )
-                            // Low HP danger badge
-                            if (isDanger && isLive) {
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(avatarColor.copy(alpha = if (isLive) 0.22f else 0.1f))
+                                .border(
+                                    width = if (isLive) 1.5.dp else 1.dp,
+                                    color = avatarColor.copy(alpha = if (isLive) 0.65f else 0.22f),
+                                    shape = RoundedCornerShape(14.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(initials, fontSize = 19.sp, fontWeight = FontWeight.Black, color = avatarColor)
+                        }
+
+                        Spacer(Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Text(
-                                    "⚠ CRITI",
-                                    fontSize = 9.sp, fontWeight = FontWeight.Black,
-                                    color = RedAccent,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(RedAccent.copy(alpha = 0.15f))
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    user.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                if (isDanger && isLive) {
+                                    Text(
+                                        "⚠ CRITI",
+                                        fontSize = 9.sp, fontWeight = FontWeight.Black,
+                                        color = RedAccent,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(RedAccent.copy(alpha = dangerAlpha.value * 0.18f))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(3.dp))
+                            Text("🎮 ${user.game}", color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.height(8.dp))
+
+                            Box(
+                                modifier = Modifier.fillMaxWidth().height(5.dp)
+                                    .clip(RoundedCornerShape(3.dp)).background(Divider)
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxHeight().fillMaxWidth(animHp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(Brush.horizontalGradient(listOf(hpColor, hpColor.copy(alpha = 0.55f))))
                                 )
                             }
+                            Spacer(Modifier.height(3.dp))
+                            Text("❤ ${user.hp}%", color = hpColor.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                         }
-                        Spacer(Modifier.height(3.dp))
-                        Text("🎮 ${user.game}", color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(7.dp))
 
-                        // Animated HP bar
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(4.dp)
-                                .clip(RoundedCornerShape(2.dp)).background(Divider)
-                        ) {
+                        Spacer(Modifier.width(10.dp))
+
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(statusText, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             Box(
-                                modifier = Modifier.fillMaxHeight().fillMaxWidth(animHp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(Brush.horizontalGradient(listOf(hpColor, hpColor.copy(alpha = 0.65f))))
-                            )
-                        }
-                        Spacer(Modifier.height(3.dp))
-                        Text("❤ ${user.hp}%", color = hpColor.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(statusText, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Button(
-                            onClick = onSelect,
-                            modifier = Modifier.height(30.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = if (isLive) GreenAccent else BgSurface),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Выбрать", color = if (isLive) BgDark else TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                modifier = Modifier
+                                    .height(30.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (isLive)
+                                            Brush.horizontalGradient(listOf(GreenAccent, Color(0xFF00AA44)))
+                                        else
+                                            Brush.horizontalGradient(listOf(BgSurface, BgSurface))
+                                    )
+                                    .clickable { onSelect() }
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "Выбрать",
+                                    color = if (isLive) BgDark else TextSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
