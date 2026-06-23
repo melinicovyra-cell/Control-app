@@ -1,0 +1,56 @@
+name: Build TrollMaster PRO APK
+
+on:
+  push:
+    branches: [ master, main, "claude/**" ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x TrollMasterPRO/gradlew
+        continue-on-error: true
+
+      - name: Setup Gradle wrapper
+        working-directory: TrollMasterPRO
+        run: |
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version=8.4
+          fi
+
+      - name: Build Debug APK
+        working-directory: TrollMasterPRO
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrollMasterPRO-debug
+          path: TrollMasterPRO/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Build Release APK (unsigned)
+        working-directory: TrollMasterPRO
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrollMasterPRO-release-unsigned
+          path: TrollMasterPRO/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 30

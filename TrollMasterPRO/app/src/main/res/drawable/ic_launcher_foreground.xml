@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- K logo: 5 geometric pieces, white on transparent -->
+
+    <!-- Left vertical bar -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 24,20 L 34,20 L 34,88 L 24,88 Z"/>
+
+    <!-- Upper arm inner piece -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 36,32 L 36,54 L 58,47 L 58,27 Z"/>
+
+    <!-- Upper arm outer piece -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 60,26 L 60,46 L 84,38 L 84,20 Z"/>
+
+    <!-- Lower arm inner piece -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 36,54 L 36,76 L 58,81 L 58,61 Z"/>
+
+    <!-- Lower arm outer piece -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 60,62 L 60,82 L 84,88 L 84,70 Z"/>
+
+</vector>
